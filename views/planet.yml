@@ -1,0 +1,64 @@
+# Saved views over the virtual joins — each read fans out one producer call per
+# tracked place (30-minute cache). Projected producer values arrive as STRINGS,
+# so every ordering goes through toFloat(); quake times are epoch milliseconds
+# and render through datetime({epochMillis: …}).
+
+- name: AirAtMyPlaces
+  description: Air quality and UV at your tracked places right now, worst air first — live from Open-Meteo.
+  params:
+    limit:
+      type: int
+      default: 10
+      description: "How many places to return, worst air first."
+  cypher: |
+    MATCH (l:WeatherLocation)-[:HAS_AIR]->(a:AirQuality)
+    RETURN l.name AS place,
+           toFloat(a.usAqi) AS usAqi,
+           toFloat(a.euAqi) AS euAqi,
+           toFloat(a.pm25) AS pm25,
+           toFloat(a.uvIndex) AS uvIndex,
+           a.observedAt AS observedAt
+    ORDER BY usAqi DESC LIMIT $limit
+
+- name: HighestUv
+  description: Your tracked places ranked by the UV index right now, strongest sun first.
+  params:
+    limit:
+      type: int
+      default: 10
+      description: "How many places to return, strongest UV first."
+  cypher: |
+    MATCH (l:WeatherLocation)-[:HAS_AIR]->(a:AirQuality)
+    RETURN l.name AS place,
+           toFloat(a.uvIndex) AS uvIndex,
+           toFloat(a.usAqi) AS usAqi
+    ORDER BY uvIndex DESC LIMIT $limit
+
+- name: QuakesNearMyPlaces
+  description: Earthquakes (M2.5+, last 30 days) within 400 km of your tracked places, largest first — an empty table means quiet ground.
+  params:
+    limit:
+      type: int
+      default: 20
+      description: "Maximum quakes to return, largest first."
+  cypher: |
+    MATCH (l:WeatherLocation)-[:HAS_QUAKE]->(q:Earthquake)
+    RETURN l.name AS nearPlace,
+           toFloat(q.magnitude) AS magnitude,
+           q.place AS epicentre,
+           toString(datetime({epochMillis: toInteger(q.time)})) AS at,
+           toFloat(q.depthKm) AS depthKm
+    ORDER BY magnitude DESC LIMIT $limit
+
+- name: ShakiestPlace
+  description: Your tracked places ranked by seismic activity nearby — quake count and the largest magnitude within 400 km this month.
+  params:
+    limit:
+      type: int
+      default: 10
+      description: "How many places to return, shakiest first."
+  cypher: |
+    MATCH (l:WeatherLocation)-[:HAS_QUAKE]->(q:Earthquake)
+    WITH l, count(q) AS quakes, max(toFloat(q.magnitude)) AS biggest
+    RETURN l.name AS place, quakes, biggest
+    ORDER BY quakes DESC, biggest DESC LIMIT $limit

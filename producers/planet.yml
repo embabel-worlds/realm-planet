@@ -1,0 +1,57 @@
+# Both producers are keyed on a COORDINATE PAIR — the composite-key join
+# (realm-spec, "Composite-key joins"). The engine composes latitude+longitude
+# into one key per anchor; `keyArgs` splits it back into each operation's
+# separate query params; `echoKeyAs` stamps the key onto every record the call
+# returns, which is what each join's `recordKeyField: key` links on.
+
+# Current air quality and UV. One call per place, half-hour cache — air-quality
+# models update hourly, so fresher polling buys nothing.
+- name: airNow
+  kind: remote
+  operation: airQuality
+  records: "$"
+  keyArgs: [latitude, longitude]
+  echoKeyAs: key
+  maxKeysPerCall: 1
+  args:
+    current: "pm2_5,pm10,ozone,nitrogen_dioxide,us_aqi,european_aqi,uv_index"
+    timezone: auto
+  project:
+    pm25: current.pm2_5
+    pm10: current.pm10
+    ozone: current.ozone
+    no2: current.nitrogen_dioxide
+    usAqi: current.us_aqi
+    euAqi: current.european_aqi
+    uvIndex: current.uv_index
+    observedAt: current.time
+  cache: { kind: ttl, seconds: 1800 }
+
+# Earthquakes near a place: M2.5+ within 400 km over the catalog's default
+# last-30-days window, largest first. MANY records per key — echoKeyAs stamps
+# the composite onto each one, so every quake links back to the place whose
+# radius found it. geometry.coordinates is [longitude, latitude, depthKm];
+# numeric path segments index into the array.
+- name: quakesNear
+  kind: remote
+  operation: quakesNear
+  records: "$.features[*]"
+  keyArgs: [latitude, longitude]
+  echoKeyAs: key
+  maxKeysPerCall: 1
+  args:
+    format: geojson
+    maxradiuskm: "400"
+    minmagnitude: "2.5"
+    orderby: magnitude
+    limit: "12"
+  project:
+    id: id
+    magnitude: properties.mag
+    place: properties.place
+    time: properties.time
+    url: properties.url
+    quakeLon: geometry.coordinates.0
+    quakeLat: geometry.coordinates.1
+    depthKm: geometry.coordinates.2
+  cache: { kind: ttl, seconds: 1800 }

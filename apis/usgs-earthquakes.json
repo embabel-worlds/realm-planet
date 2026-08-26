@@ -1,0 +1,105 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "USGS Earthquake Catalog",
+    "version": "1.0.0",
+    "description": "The US Geological Survey's public earthquake catalog — global coverage, no key, no account. `quakesNear` is a radius search around a coordinate pair; when `starttime` is omitted the window defaults to the LAST 30 DAYS. `significantQuakes` is the curated feed of significant events this month."
+  },
+  "servers": [
+    { "url": "https://earthquake.usgs.gov" }
+  ],
+  "paths": {
+    "/fdsnws/event/1/query": {
+      "get": {
+        "operationId": "quakesNear",
+        "summary": "Earthquakes within a radius of a coordinate pair (default window: last 30 days)",
+        "description": "GeoJSON FeatureCollection of earthquakes within `maxradiuskm` of the given latitude/longitude. Each feature carries `properties.mag`, `properties.place` (a human-readable locality), `properties.time` (epoch MILLISECONDS), `properties.url`, and `geometry.coordinates` as [longitude, latitude, depthKm]. Omit `starttime` for the default 30-day window.",
+        "parameters": [
+          {
+            "name": "format",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Always `geojson`."
+          },
+          {
+            "name": "latitude",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Latitude of the search centre, decimal degrees."
+          },
+          {
+            "name": "longitude",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Longitude of the search centre, decimal degrees."
+          },
+          {
+            "name": "maxradiuskm",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Search radius in kilometres, e.g. 400."
+          },
+          {
+            "name": "minmagnitude",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string" },
+            "description": "Minimum magnitude, e.g. 2.5. Below ~2.5 events are rarely felt."
+          },
+          {
+            "name": "starttime",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string" },
+            "description": "ISO8601 date, e.g. 2026-08-01. Omit for the default last-30-days window."
+          },
+          {
+            "name": "endtime",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string" },
+            "description": "ISO8601 date. Omit for now."
+          },
+          {
+            "name": "orderby",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string" },
+            "description": "`time` (newest first, default), `magnitude` (largest first)."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string" },
+            "description": "Maximum events to return."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "GeoJSON FeatureCollection; `features` may be empty — quiet ground is a normal answer.",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        }
+      }
+    },
+    "/earthquakes/feed/v1.0/summary/significant_month.geojson": {
+      "get": {
+        "operationId": "significantQuakes",
+        "summary": "The USGS curated feed of significant earthquakes this month, worldwide",
+        "description": "GeoJSON FeatureCollection of the month's significant events — same feature shape as quakesNear. No parameters.",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "GeoJSON FeatureCollection of significant events.",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        }
+      }
+    }
+  }
+}

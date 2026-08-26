@@ -1,0 +1,30 @@
+# Two keyless, unauthenticated APIs, specs VENDORED next to this file (the same
+# choice realm-weather makes): Open-Meteo's OpenAPI sits behind an authenticated
+# endpoint and the USGS publishes none, so a hand-curated pin is the only stable
+# contract available.
+#
+# Each spec is deliberately NARROW — only the operations the producers, the
+# skill and the Planet Pulse app actually call.
+#
+# NO `auth:` and NO `token-env:` anywhere: both sources are open. The realm
+# works the moment it is installed, with nothing to configure.
+
+# Current air quality and UV for a coordinate pair. Same host family as
+# realm-weather's forecast API but a DIFFERENT host (air-quality-api.…), hence
+# its own namespace.
+- url: open-meteo-air-quality.json
+  name: open_meteo_air
+  type: openapi
+  auth: none
+  operation-ids:
+    - airQuality
+
+# Earthquakes: a radius search around a coordinate pair, and the curated
+# significant-quakes feed for the global pulse line.
+- url: usgs-earthquakes.json
+  name: usgs
+  type: openapi
+  auth: none
+  operation-ids:
+    - quakesNear
+    - significantQuakes

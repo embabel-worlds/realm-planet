@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Planet Pulse</title>
+<link rel="stylesheet" href="/api/v1/apps-runtime/v1/theme.css">
+<script src="/api/v1/apps-runtime/v1/embabel.js"></script>
+<script src="/api/v1/apps-runtime/gateway.js"></script>
+<style>
+  :root {
+    --pp-bg: #05070f; --pp-card: #0b101f; --pp-line: #1a2340;
+    --pp-ink: #e6ecff; --pp-dim: #7c89b0; --pp-glow: #56d3ff;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    background: radial-gradient(1200px 700px at 70% -10%, #101a3a 0%, var(--pp-bg) 55%) fixed;
+    color: var(--pp-ink); font-family: system-ui, -apple-system, sans-serif;
+    min-height: 100vh; padding: 28px 24px 90px;
+  }
+  header { max-width: 1180px; margin: 0 auto 22px; display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+  h1 { font-size: 26px; letter-spacing: 0.22em; font-weight: 800; }
+  h1 span { color: var(--pp-glow); }
+  header p { color: var(--pp-dim); font-size: 13px; }
+  .grid { max-width: 1180px; margin: 0 auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 18px; }
+  .card {
+    background: linear-gradient(180deg, #0d1428 0%, var(--pp-card) 100%);
+    border: 1px solid var(--pp-line); border-radius: 14px; padding: 18px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.45);
+  }
+  .card h2 { font-size: 17px; margin-bottom: 2px; }
+  .coords { color: var(--pp-dim); font-size: 11px; font-family: ui-monospace, monospace; margin-bottom: 12px; }
+  .toprow { display: flex; gap: 16px; align-items: center; }
+  .gauge { position: relative; width: 108px; height: 108px; flex: none; }
+  .gauge svg { transform: rotate(-90deg); }
+  .gauge .num { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
+  .gauge .num b { font-size: 26px; display: block; line-height: 1; }
+  .gauge .num i { font-style: normal; font-size: 9px; letter-spacing: 0.14em; color: var(--pp-dim); }
+  .verdict { font-size: 14px; font-weight: 700; margin-bottom: 6px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { border: 1px solid var(--pp-line); border-radius: 999px; padding: 3px 9px; font-size: 11px; color: var(--pp-dim); }
+  .chip b { color: var(--pp-ink); font-weight: 600; }
+  .radarwrap { margin-top: 14px; border-top: 1px solid var(--pp-line); padding-top: 12px; }
+  .radartitle { font-size: 10px; letter-spacing: 0.18em; color: var(--pp-dim); margin-bottom: 8px; }
+  .radarrow { display: flex; gap: 14px; align-items: flex-start; }
+  canvas { flex: none; border-radius: 50%; background: radial-gradient(circle, #0a1226 0%, #070c1a 70%); }
+  .quakelist { font-size: 11.5px; line-height: 1.7; color: var(--pp-dim); min-width: 0; }
+  .quakelist b { color: var(--pp-ink); }
+  .quiet { color: var(--pp-dim); font-size: 12px; padding-top: 24px; }
+  .ticker {
+    position: fixed; left: 0; right: 0; bottom: 0; background: rgba(7,10,22,0.92);
+    border-top: 1px solid var(--pp-line); backdrop-filter: blur(6px);
+    padding: 10px 0; overflow: hidden; white-space: nowrap; font-size: 12.5px;
+  }
+  .ticker .lane { display: inline-block; padding-left: 100vw; animation: slide 60s linear infinite; }
+  .ticker b { color: var(--pp-glow); }
+  .ticker .m { font-weight: 800; }
+  @keyframes slide { to { transform: translateX(-100%); } }
+  .hint { max-width: 1180px; margin: 8px auto 0; color: var(--pp-dim); font-size: 12.5px; }
+  .err { color: #ff8f8f; }
+</style>
+</head>
+<body>
+<header>
+  <h1>PLANET <span>PULSE</span></h1>
+  <p>air · sun · ground — live, around your places</p>
+</header>
+<div class="grid" id="grid"></div>
+<p class="hint" id="hint"></p>
+<div class="ticker"><div class="lane" id="lane">fetching the planet…</div></div>
+
+<script>
+'use strict';
+/* US AQI bands: colour + word. */
+function band(aqi) {
+  if (aqi == null || isNaN(aqi)) return { c: '#5a6b95', w: 'no data' };
+  if (aqi <= 50)  return { c: '#3ecf8e', w: 'Good' };
+  if (aqi <= 100) return { c: '#e8d44d', w: 'Moderate' };
+  if (aqi <= 150) return { c: '#f0923e', w: 'Unhealthy (sensitive)' };
+  if (aqi <= 200) return { c: '#ef5b5b', w: 'Unhealthy' };
+  if (aqi <= 300) return { c: '#b05bef', w: 'Very unhealthy' };
+  return { c: '#a33', w: 'Hazardous' };
+}
+const RADIUS_KM = 400;
+function haversineKm(a1, o1, a2, o2) {
+  const r = Math.PI / 180, R = 6371;
+  const dA = (a2 - a1) * r, dO = (o2 - o1) * r;
+  const h = Math.sin(dA/2)**2 + Math.cos(a1*r) * Math.cos(a2*r) * Math.sin(dO/2)**2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+function bearing(a1, o1, a2, o2) {
+  const r = Math.PI / 180;
+  const y = Math.sin((o2-o1)*r) * Math.cos(a2*r);
+  const x = Math.cos(a1*r)*Math.sin(a2*r) - Math.sin(a1*r)*Math.cos(a2*r)*Math.cos((o2-o1)*r);
+  return Math.atan2(y, x);
+}
+function daysAgo(ms) {
+  const d = (Date.now() - ms) / 86400000;
+  return d < 1 ? 'today' : d < 2 ? 'yesterday' : Math.round(d) + 'd ago';
+}
+function gaugeSvg(aqi, colour) {
+  const pct = Math.min(1, (isNaN(aqi) ? 0 : aqi) / 200);
+  const r = 46, c = 2 * Math.PI * r, off = c * (1 - pct);
+  return `<svg width="108" height="108" viewBox="0 0 108 108">
+    <circle cx="54" cy="54" r="${r}" fill="none" stroke="#141c33" stroke-width="9"/>
+    <circle cx="54" cy="54" r="${r}" fill="none" stroke="${colour}" stroke-width="9"
+      stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${off}"/>
+  </svg>`;
+}
+
+/* The seismic radar: the place at centre, range rings at 100/200/300/400 km,
+   each quake plotted by bearing + distance, dot area tracking magnitude, and a
+   ping animating outward from the largest event. */
+function drawRadar(canvas, quakes) {
+  const S = canvas.width, ctx = canvas.getContext('2d'), mid = S / 2;
+  const scale = (S / 2 - 8) / RADIUS_KM;
+  let t0 = performance.now();
+  const biggest = quakes[0];
+  function frame(now) {
+    ctx.clearRect(0, 0, S, S);
+    ctx.strokeStyle = '#1c2848'; ctx.fillStyle = '#5a6b95'; ctx.font = '8px ui-monospace';
+    for (const km of [100, 200, 300, 400]) {
+      ctx.beginPath(); ctx.arc(mid, mid, km * scale, 0, 7); ctx.stroke();
+    }
+    ctx.fillText('400km', mid + 400 * scale - 26, mid - 3);
+    ctx.fillStyle = '#56d3ff';
+    ctx.beginPath(); ctx.arc(mid, mid, 3, 0, 7); ctx.fill();
+    for (const q of quakes) {
+      const x = mid + Math.sin(q.brg) * q.km * scale;
+      const y = mid - Math.cos(q.brg) * q.km * scale;
+      const rad = 2 + q.mag * 1.6;
+      ctx.fillStyle = q.mag >= 5 ? 'rgba(239,91,91,0.85)' : q.mag >= 4 ? 'rgba(240,146,62,0.8)' : 'rgba(232,212,77,0.7)';
+      ctx.beginPath(); ctx.arc(x, y, rad, 0, 7); ctx.fill();
+      if (q === biggest) {
+        const p = ((now - t0) % 2200) / 2200;
+        ctx.strokeStyle = `rgba(86,211,255,${1 - p})`;
+        ctx.beginPath(); ctx.arc(x, y, rad + p * 26, 0, 7); ctx.stroke();
+      }
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+}
+
+async function placeCard(p) {
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = `<h2>${p.name}</h2><div class="coords">${(+p.lat).toFixed(2)}, ${(+p.lon).toFixed(2)}</div>
+    <div class="toprow"><div class="gauge"></div><div><div class="verdict">…</div><div class="chips"></div></div></div>
+    <div class="radarwrap"><div class="radartitle">SEISMIC · M2.5+ · 30 DAYS · 400 KM</div>
+    <div class="radarrow"><canvas width="150" height="150"></canvas><div class="quakelist">listening…</div></div></div>`;
+  document.getElementById('grid').append(card);
+
+  try {
+    const air = await gateway.openMeteoAir.airQuality({
+      latitude: String(p.lat), longitude: String(p.lon),
+      current: 'pm2_5,pm10,ozone,nitrogen_dioxide,us_aqi,european_aqi,uv_index', timezone: 'auto',
+    });
+    const c = air.current || {};
+    const aqi = +c.us_aqi, b = band(aqi);
+    card.querySelector('.gauge').innerHTML = gaugeSvg(aqi, b.c) +
+      `<div class="num"><b style="color:${b.c}">${isNaN(aqi) ? '—' : aqi}</b><i>US AQI</i></div>`;
+    card.querySelector('.verdict').textContent = b.w;
+    card.querySelector('.verdict').style.color = b.c;
+    card.querySelector('.chips').innerHTML =
+      `<span class="chip">PM2.5 <b>${c.pm2_5 ?? '—'}</b></span>` +
+      `<span class="chip">O₃ <b>${c.ozone ?? '—'}</b></span>` +
+      `<span class="chip">NO₂ <b>${c.nitrogen_dioxide ?? '—'}</b></span>` +
+      `<span class="chip">UV <b>${c.uv_index ?? '—'}</b></span>`;
+  } catch (e) {
+    card.querySelector('.verdict').innerHTML = '<span class="err">air unavailable</span>';
+  }
+
+  try {
+    const res = await gateway.usgs.quakesNear({
+      format: 'geojson', latitude: String(p.lat), longitude: String(p.lon),
+      maxradiuskm: String(RADIUS_KM), minmagnitude: '2.5', orderby: 'magnitude', limit: '12',
+    });
+    const quakes = (res.features || []).map(f => ({
+      mag: +f.properties.mag, where: f.properties.place, when: +f.properties.time,
+      km: haversineKm(+p.lat, +p.lon, f.geometry.coordinates[1], f.geometry.coordinates[0]),
+      brg: bearing(+p.lat, +p.lon, f.geometry.coordinates[1], f.geometry.coordinates[0]),
+    })).sort((a, b) => b.mag - a.mag);
+    const list = card.querySelector('.quakelist');
+    if (!quakes.length) {
+      list.innerHTML = '<span class="quiet">quiet ground — nothing above M2.5 this month</span>';
+    } else {
+      list.innerHTML = quakes.slice(0, 4).map(q =>
+        `<div><b>M${q.mag.toFixed(1)}</b> · ${Math.round(q.km)} km · ${q.where} · ${daysAgo(q.when)}</div>`).join('');
+      drawRadar(card.querySelector('canvas'), quakes);
+    }
+  } catch (e) {
+    card.querySelector('.quakelist').innerHTML = '<span class="err">quake feed unavailable</span>';
+  }
+}
+
+async function ticker() {
+  try {
+    const res = await gateway.usgs.significantQuakes({});
+    const items = (res.features || []).slice(0, 12).map(f =>
+      `<b class="m">M${(+f.properties.mag).toFixed(1)}</b> ${f.properties.place} <b>·</b> ${daysAgo(+f.properties.time)}`);
+    document.getElementById('lane').innerHTML =
+      'SIGNIFICANT THIS MONTH &nbsp;·&nbsp; ' + (items.join(' &nbsp;&nbsp;·&nbsp;&nbsp; ') || 'a quiet month, worldwide');
+  } catch (e) { document.getElementById('lane').textContent = 'global feed unavailable'; }
+}
+
+async function main() {
+  let places = [];
+  try {
+    const res = await gateway.kg.query({
+      cypher: 'MATCH (l:WeatherLocation) WHERE l.latitude IS NOT NULL RETURN l.name AS name, l.latitude AS lat, l.longitude AS lon ORDER BY l.name',
+    });
+    places = res.rows || [];
+  } catch (e) { /* no weather realm — fall through to the tour */ }
+  if (!places.length) {
+    document.getElementById('hint').textContent =
+      'No tracked places found — showing a world tour. Install realm-weather and add your places to make this yours.';
+    places = [
+      { name: 'Tokyo', lat: 35.68, lon: 139.69 },
+      { name: 'San Francisco', lat: 37.77, lon: -122.42 },
+      { name: 'Reykjavík', lat: 64.15, lon: -21.94 },
+    ];
+  }
+  await Promise.all(places.map(placeCard));
+  ticker();
+}
+main();
+</script>
+</body>
+</html>

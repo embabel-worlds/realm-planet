@@ -1,0 +1,60 @@
+# Two VIRTUAL types — fetched per query, gone at rollback — that decorate
+# ANOTHER realm's anchors. This realm persists nothing of its own: it is a pure
+# enrichment layer over any type carrying `latitude` and `longitude` properties.
+# The joins below anchor on realm-weather's WeatherLocation; with that realm
+# absent they are simply dormant. To join air and quakes onto a different
+# coordinate-bearing type, copy a `virtualJoins` entry and change `anchorLabel`.
+
+# Current air quality at a place.
+#   Which of my places has the worst air right now?
+#     MATCH (l:WeatherLocation)-[:HAS_AIR]->(a:AirQuality)
+#     RETURN l.name, toFloat(a.usAqi) AS aqi ORDER BY aqi DESC LIMIT 1
+- name: AirQuality
+  description: "Live air quality at a tracked place, from Open-Meteo — PM2.5, PM10, ozone, NO2, the US and European AQI, and the UV index. Reached from WeatherLocation via HAS_AIR; fetched fresh per query (30-minute cache). Projected values arrive as strings — ORDER BY through toFloat()."
+  virtualJoins:
+    - anchorLabel: WeatherLocation
+      relationship: HAS_AIR
+      producerKeyFields: [latitude, longitude]
+      recordKeyField: key
+      producer: airNow
+      description: "Current air reading for the place — for 'worst air / highest UV of my places', ORDER BY toFloat(a.usAqi) / toFloat(a.uvIndex)."
+  properties:
+    key:
+      description: "The coordinate pair this reading was fetched for. Identity of the transient node."
+      metadata:
+        identity: "true"
+    pm25: "Fine particulate matter (PM2.5), µg/m³ — the headline health number."
+    pm10: "Coarse particulate matter (PM10), µg/m³."
+    ozone: "Ground-level ozone, µg/m³."
+    no2: "Nitrogen dioxide, µg/m³ — the traffic signature."
+    usAqi: "US Air Quality Index. 0-50 good, 51-100 moderate, 101-150 unhealthy for sensitive groups, 151+ unhealthy."
+    euAqi: "European Air Quality Index. 0-20 good, 20-40 fair, 40-60 moderate, 60+ poor."
+    uvIndex: "UV index right now. 3+ protection advised, 8+ extreme."
+    observedAt: "When the model observed these values, local time."
+
+# Recent earthquakes near a place: M2.5+ within 400 km, last 30 days.
+# A quake within range of TWO tracked places merges into one node with a
+# HAS_QUAKE edge from each — `id` is the USGS event id and the merge identity,
+# while `key` is only the link back to the place whose radius found it.
+- name: Earthquake
+  description: "A recent earthquake near a tracked place, from the USGS catalog — magnitude 2.5+ within 400 km over the last 30 days. Reached from WeatherLocation via HAS_QUAKE; an empty result means quiet ground, not an error. `time` is epoch milliseconds — render with datetime({epochMillis: toInteger(q.time)})."
+  virtualJoins:
+    - anchorLabel: WeatherLocation
+      relationship: HAS_QUAKE
+      producerKeyFields: [latitude, longitude]
+      recordKeyField: key
+      producer: quakesNear
+      description: "Quakes whose epicentre falls within 400 km of the place — for 'any earthquakes near my places', ORDER BY toFloat(q.magnitude) DESC."
+  properties:
+    id:
+      description: "USGS event id. Identity — the same quake near two places is one node with two HAS_QUAKE edges."
+      metadata:
+        identity: "true"
+    key: "The coordinate pair whose radius search found this quake — the join link, not the quake's own location."
+    magnitude: "Moment magnitude. Below ~2.5 rarely felt; 4+ noticeable; 6+ damaging."
+    place: "USGS human-readable locality, e.g. '12 km SW of Somewhere'."
+    time: "Origin time, epoch MILLISECONDS as a string."
+    url: "USGS event page."
+    quakeLat: "Epicentre latitude, decimal degrees."
+    quakeLon: "Epicentre longitude, decimal degrees."
+    depthKm: "Hypocentre depth in kilometres — shallow (<70) shakes hardest."

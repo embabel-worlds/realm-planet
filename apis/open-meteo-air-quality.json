@@ -1,0 +1,56 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Open-Meteo Air Quality",
+    "version": "1.0.0",
+    "description": "Free, keyless air-quality API. Returns current pollutant concentrations, air-quality indices and UV for a coordinate pair. Same provider as the Open-Meteo forecast API but a different host, so it is its own namespace."
+  },
+  "servers": [
+    { "url": "https://air-quality-api.open-meteo.com" }
+  ],
+  "paths": {
+    "/v1/air-quality": {
+      "get": {
+        "operationId": "airQuality",
+        "summary": "Current air quality, pollutant levels and UV index for a coordinate pair",
+        "description": "Returns air-quality readings for the given latitude/longitude. Ask for the fields you want via the `current` comma-separated selector, e.g. current=pm2_5,pm10,ozone,nitrogen_dioxide,us_aqi,european_aqi,uv_index. `us_aqi` bands: 0-50 good, 51-100 moderate, 101-150 unhealthy for sensitive groups, 151-200 unhealthy, 201-300 very unhealthy, 301+ hazardous. `european_aqi` bands: 0-20 good, 20-40 fair, 40-60 moderate, 60-80 poor, 80-100 very poor, 100+ extremely poor. Pollutant units are µg/m³.",
+        "parameters": [
+          {
+            "name": "latitude",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Latitude in decimal degrees, e.g. -33.87."
+          },
+          {
+            "name": "longitude",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Longitude in decimal degrees, e.g. 151.21."
+          },
+          {
+            "name": "current",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string" },
+            "description": "Comma-separated current fields, e.g. pm2_5,pm10,ozone,nitrogen_dioxide,sulphur_dioxide,carbon_monoxide,us_aqi,european_aqi,uv_index,dust."
+          },
+          {
+            "name": "timezone",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string" },
+            "description": "IANA timezone, or `auto` to use the timezone of the coordinates. Without it times are UTC."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Air-quality readings. `current` holds one value per requested field plus `time`.",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        }
+      }
+    }
+  }
+}
