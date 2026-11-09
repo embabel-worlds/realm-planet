@@ -48,7 +48,7 @@
   .quakelist b { color: var(--pp-ink); }
   .quiet { color: var(--pp-dim); font-size: 12px; padding-top: 24px; }
   .ticker {
-    position: fixed; left: 0; right: 0; bottom: 0; background: rgba(7,10,22,0.92);
+    position: fixed; left: 0; right: 0; bottom: 32px; background: rgba(7,10,22,0.92);
     border-top: 1px solid var(--pp-line); backdrop-filter: blur(6px);
     padding: 10px 0; overflow: hidden; white-space: nowrap; font-size: 12.5px;
   }
@@ -226,5 +226,8 @@ async function main() {
 }
 main();
 </script>
+<div id="embabel-badge" style="position:fixed;bottom:0;left:0;right:0;text-align:center;padding:6px 0;background:rgba(10,10,15,0.9);border-top:1px solid rgba(99,192,245,0.2);font-size:0.75rem;color:#6b7280;z-index:9999;pointer-events:none;">
+Created with <a href="https://worlds.embabel.com" target="_blank" rel="noopener noreferrer" style="color:#63c0f5;text-decoration:none;pointer-events:auto;">Embabel Worlds</a>
+</div>
 </body>
 </html>
