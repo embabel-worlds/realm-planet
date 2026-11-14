@@ -32,6 +32,13 @@
 # the composite onto each one, so every quake links back to the place whose
 # radius found it. geometry.coordinates is [longitude, latitude, depthKm];
 # numeric path segments index into the array.
+#
+# `limit` is the operation's page size, so a FULL page reads as a truncated
+# one and the engine refuses to rank or count over it (FETCH_CAPPED) — rightly,
+# since "biggest of the first 12" is not "biggest". It is therefore set far above
+# what a month brings anywhere quiet or busy (Anchorage ~150, Puerto Rico ~100,
+# Tokyo ~25) rather than to what a card shows. A place that really fills 1000 is
+# in an aftershock swarm, and a refusal there is the honest answer.
 - name: quakesNear
   kind: remote
   operation: quakesNear
@@ -44,7 +51,7 @@
     maxradiuskm: "400"
     minmagnitude: "2.5"
     orderby: magnitude
-    limit: "12"
+    limit: "1000"
   project:
     id: id
     magnitude: properties.mag

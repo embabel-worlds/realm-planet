@@ -58,6 +58,19 @@
   @keyframes slide { to { transform: translateX(-100%); } }
   .hint { max-width: 1180px; margin: 8px auto 0; color: var(--pp-dim); font-size: 12.5px; }
   .err { color: #ff8f8f; }
+  .track { max-width: 1180px; margin: 0 auto 18px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .track input {
+    flex: 1 1 260px; min-width: 0; background: var(--pp-card); color: var(--pp-ink);
+    border: 1px solid var(--pp-line); border-radius: 10px; padding: 9px 12px; font: inherit; font-size: 14px;
+  }
+  .track button, .cand {
+    background: #12204a; color: var(--pp-ink); border: 1px solid #2a3a6e; border-radius: 10px;
+    padding: 9px 14px; font: inherit; font-size: 13px; cursor: pointer;
+  }
+  .track button:hover, .cand:hover { border-color: var(--pp-glow); }
+  .cands { max-width: 1180px; margin: -8px auto 18px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .cand { padding: 6px 12px; font-size: 12px; }
+  .cand i { font-style: normal; color: var(--pp-dim); }
 </style>
 </head>
 <body>
@@ -65,12 +78,22 @@
   <h1>PLANET <span>PULSE</span></h1>
   <p>air · sun · ground — live, around your places</p>
 </header>
+<form class="track" id="track">
+  <input id="q" placeholder="Track a place anywhere — e.g. Lisbon, Anchorage, Kyoto" autocomplete="off" aria-label="Place name">
+  <button type="submit">Track</button>
+</form>
+<div class="cands" id="cands"></div>
 <div class="grid" id="grid"></div>
 <p class="hint" id="hint"></p>
 <div class="ticker"><div class="lane" id="lane">fetching the planet…</div></div>
 
 <script>
 'use strict';
+/* Place names are typed by the user or come back from a geocoder; either way
+   they reach the page as text, never as markup. */
+function esc(v) {
+  return String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
 /* US AQI bands: colour + word. */
 function band(aqi) {
   if (aqi == null || isNaN(aqi)) return { c: '#5a6b95', w: 'no data' };
@@ -145,7 +168,7 @@ function drawRadar(canvas, quakes) {
 async function placeCard(p) {
   const card = document.createElement('div');
   card.className = 'card';
-  card.innerHTML = `<h2>${p.name}</h2><div class="coords">${(+p.lat).toFixed(2)}, ${(+p.lon).toFixed(2)}</div>
+  card.innerHTML = `<h2>${esc(p.name)}</h2><div class="coords">${(+p.lat).toFixed(2)}, ${(+p.lon).toFixed(2)}</div>
     <div class="toprow"><div class="gauge"></div><div><div class="verdict">…</div><div class="chips"></div></div></div>
     <div class="radarwrap"><div class="radartitle">SEISMIC · M2.5+ · 30 DAYS · 400 KM</div>
     <div class="radarrow"><canvas width="150" height="150"></canvas><div class="quakelist">listening…</div></div></div>`;
@@ -186,7 +209,7 @@ async function placeCard(p) {
       list.innerHTML = '<span class="quiet">quiet ground — nothing above M2.5 this month</span>';
     } else {
       list.innerHTML = quakes.slice(0, 4).map(q =>
-        `<div><b>M${q.mag.toFixed(1)}</b> · ${Math.round(q.km)} km · ${q.where} · ${daysAgo(q.when)}</div>`).join('');
+        `<div><b>M${q.mag.toFixed(1)}</b> · ${Math.round(q.km)} km · ${esc(q.where)} · ${daysAgo(q.when)}</div>`).join('');
       drawRadar(card.querySelector('canvas'), quakes);
     }
   } catch (e) {
@@ -198,23 +221,32 @@ async function ticker() {
   try {
     const res = await gateway.usgs.significantQuakes({});
     const items = (res.features || []).slice(0, 12).map(f =>
-      `<b class="m">M${(+f.properties.mag).toFixed(1)}</b> ${f.properties.place} <b>·</b> ${daysAgo(+f.properties.time)}`);
+      `<b class="m">M${(+f.properties.mag).toFixed(1)}</b> ${esc(f.properties.place)} <b>·</b> ${daysAgo(+f.properties.time)}`);
     document.getElementById('lane').innerHTML =
       'SIGNIFICANT THIS MONTH &nbsp;·&nbsp; ' + (items.join(' &nbsp;&nbsp;·&nbsp;&nbsp; ') || 'a quiet month, worldwide');
   } catch (e) { document.getElementById('lane').textContent = 'global feed unavailable'; }
 }
 
-async function main() {
-  let places = [];
-  try {
-    const res = await gateway.kg.query({
-      cypher: 'MATCH (l:WeatherLocation) WHERE l.latitude IS NOT NULL RETURN l.name AS name, l.latitude AS lat, l.longitude AS lon ORDER BY l.name',
-    });
-    places = res.rows || [];
-  } catch (e) { /* no weather realm — fall through to the tour */ }
+/* The realm's own places first, then realm-uk-streets' UkPlaces when that
+   realm is installed. The second read is ALLOWED to fail: a query naming a label
+   no installed realm declares is refused, and that refusal just means there are
+   no UK places to show. */
+async function loadPlaces() {
+  const read = async (cypher) => {
+    try { return (await gateway.kg.query({ cypher })).rows || []; } catch (e) { return []; }
+  };
+  const own = await read('MATCH (p:PlanetPlace) WHERE p.latitude IS NOT NULL RETURN p.name AS name, p.latitude AS lat, p.longitude AS lon ORDER BY p.name');
+  const uk = await read('MATCH (u:UkPlace) WHERE u.latitude IS NOT NULL RETURN u.name AS name, u.latitude AS lat, u.longitude AS lon ORDER BY u.name');
+  return own.concat(uk);
+}
+
+async function render() {
+  document.getElementById('grid').replaceChildren();
+  const hint = document.getElementById('hint');
+  let places = await loadPlaces();
+  hint.textContent = '';
   if (!places.length) {
-    document.getElementById('hint').textContent =
-      'No tracked places found — showing a world tour. Install realm-weather and add your places to make this yours.';
+    hint.textContent = 'No tracked places yet — showing a world tour. Type a place above and press Track to make this yours.';
     places = [
       { name: 'Tokyo', lat: 35.68, lon: 139.69 },
       { name: 'San Francisco', lat: 37.77, lon: -122.42 },
@@ -222,6 +254,54 @@ async function main() {
     ];
   }
   await Promise.all(places.map(placeCard));
+}
+
+/* Tracking a place: geocode the name ONCE and store the coordinates on a
+   PlanetPlace, so every later read is a lookup rather than a guess. A bare name
+   is ambiguous ('Lisbon' is also a village in Ohio), so more than one candidate
+   is put to the user rather than chosen silently. */
+async function track(name, r) {
+  const hint = document.getElementById('hint');
+  try {
+    await gateway.repository.createEntry({ type: 'PlanetPlace', data: {
+      name, latitude: r.latitude, longitude: r.longitude,
+      country: r.country, countryCode: r.country_code, region: r.admin1, timezone: r.timezone,
+    }});
+    document.getElementById('cands').replaceChildren();
+    document.getElementById('q').value = '';
+    await render();
+  } catch (e) {
+    hint.textContent = 'Could not track ' + name + ': ' + String(e).slice(0, 160);
+  }
+}
+
+document.getElementById('track').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const q = document.getElementById('q').value.trim();
+  const cands = document.getElementById('cands');
+  const hint = document.getElementById('hint');
+  cands.replaceChildren();
+  if (q.length < 2) return;
+  try {
+    const hits = ((await gateway.openMeteoGeo.searchPlaces({ name: q, count: '6', language: 'en' })).results || [])
+      .sort((a, b) => (b.population || 0) - (a.population || 0));
+    if (!hits.length) { hint.textContent = 'No place called "' + q + '" found.'; return; }
+    if (hits.length === 1) { await track(hits[0].name, hits[0]); return; }
+    hint.textContent = 'Which "' + q + '"?';
+    for (const r of hits) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'cand';
+      b.innerHTML = `${esc(r.name)} <i>${esc([r.admin1, r.country].filter(Boolean).join(', '))}</i>`;
+      b.addEventListener('click', () => track(r.name, r));
+      cands.append(b);
+    }
+  } catch (e) {
+    hint.textContent = 'Place search unavailable: ' + String(e).slice(0, 160);
+  }
+});
+
+async function main() {
+  await render();
   ticker();
 }
 main();

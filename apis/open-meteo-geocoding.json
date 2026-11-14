@@ -1,0 +1,92 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Open-Meteo Geocoding",
+    "version": "1.0.0",
+    "description": "Free, keyless place-name search over GeoNames. Turns a name the user typed into candidate places with coordinates, country, region, time zone and population. Same provider as the air-quality API but a different host, so it is its own namespace."
+  },
+  "servers": [
+    {
+      "url": "https://geocoding-api.open-meteo.com"
+    }
+  ],
+  "paths": {
+    "/v1/search": {
+      "get": {
+        "operationId": "searchPlaces",
+        "summary": "Find places by name, with coordinates",
+        "description": "Returns up to `count` places whose name matches, most relevant first. A bare name is ambiguous — 'Lisbon' is a capital in Portugal and a village in Ohio — so show the user `country` and `admin1` and let them pick, or prefer the most populous candidate. When nothing matches, `results` is ABSENT from the response rather than empty.",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The place name to search for, e.g. 'Lisbon'. Two or more characters; postal codes also match in some countries."
+          },
+          {
+            "name": "count",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Maximum number of candidates, 1-100. Default 10."
+          },
+          {
+            "name": "language",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Language of the returned names, e.g. 'en'."
+          },
+          {
+            "name": "countryCode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "ISO-3166-1 alpha-2 code to restrict the search to one country, e.g. 'PT'."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Candidate places. Each result carries `name`, `latitude`, `longitude`, `country`, `country_code`, `admin1` (region or state), `timezone`, `population` and `feature_code` (PPLC is a capital, PPLA a regional seat, PPL a populated place).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": { "type": "integer" },
+                          "name": { "type": "string" },
+                          "latitude": { "type": "number" },
+                          "longitude": { "type": "number" },
+                          "country": { "type": "string" },
+                          "country_code": { "type": "string" },
+                          "admin1": { "type": "string" },
+                          "timezone": { "type": "string" },
+                          "population": { "type": "integer" },
+                          "feature_code": { "type": "string" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

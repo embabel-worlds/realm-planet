@@ -2,6 +2,13 @@
 # tracked place (30-minute cache). Projected producer values arrive as STRINGS,
 # so every ordering goes through toFloat(); quake times are epoch milliseconds
 # and render through datetime({epochMillis: …}).
+#
+# Every view reads PlanetPlace, the realm's own anchor, and ONLY that. Folding
+# realm-uk-streets' UkPlace in with a UNION would be the obvious move and the
+# wrong one: a query naming a label no installed realm declares is refused, not
+# answered empty, so on a world without realm-uk-streets every view here would
+# fail — which is precisely the install that has to work. UK places still get
+# HAS_AIR and HAS_QUAKE (see types/planet.yml); reach them by MATCHing UkPlace.
 
 - name: AirAtMyPlaces
   description: Air quality and UV at your tracked places right now, worst air first — live from Open-Meteo.
@@ -11,7 +18,7 @@
       default: 10
       description: "How many places to return, worst air first."
   cypher: |
-    MATCH (l:WeatherLocation)-[:HAS_AIR]->(a:AirQuality)
+    MATCH (l:PlanetPlace)-[:HAS_AIR]->(a:AirQuality)
     RETURN l.name AS place,
            toFloat(a.usAqi) AS usAqi,
            toFloat(a.euAqi) AS euAqi,
@@ -28,7 +35,7 @@
       default: 10
       description: "How many places to return, strongest UV first."
   cypher: |
-    MATCH (l:WeatherLocation)-[:HAS_AIR]->(a:AirQuality)
+    MATCH (l:PlanetPlace)-[:HAS_AIR]->(a:AirQuality)
     RETURN l.name AS place,
            toFloat(a.uvIndex) AS uvIndex,
            toFloat(a.usAqi) AS usAqi
@@ -42,7 +49,7 @@
       default: 20
       description: "Maximum quakes to return, largest first."
   cypher: |
-    MATCH (l:WeatherLocation)-[:HAS_QUAKE]->(q:Earthquake)
+    MATCH (l:PlanetPlace)-[:HAS_QUAKE]->(q:Earthquake)
     RETURN l.name AS nearPlace,
            toFloat(q.magnitude) AS magnitude,
            q.place AS epicentre,
@@ -58,7 +65,7 @@
       default: 10
       description: "How many places to return, shakiest first."
   cypher: |
-    MATCH (l:WeatherLocation)-[:HAS_QUAKE]->(q:Earthquake)
+    MATCH (l:PlanetPlace)-[:HAS_QUAKE]->(q:Earthquake)
     WITH l, count(q) AS quakes, max(toFloat(q.magnitude)) AS biggest
     RETURN l.name AS place, quakes, biggest
     ORDER BY quakes DESC, biggest DESC LIMIT $limit

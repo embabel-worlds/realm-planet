@@ -1,20 +1,24 @@
 name: realm-planet
 description: |
   The planet around your places: live air quality and UV from Open-Meteo,
-  and recent earthquakes from the USGS — both keyed on coordinates, so this
-  realm JOINS onto anything that carries a latitude and longitude. Installed
-  beside realm-weather, every tracked WeatherLocation quietly grows a
-  HAS_AIR reading and a HAS_QUAKE neighbourhood: "which of my places has
-  the worst air right now", "any earthquakes near my places this month".
+  and recent earthquakes from the USGS — both keyed on coordinates. Track a
+  place anywhere in the world by name (a keyless geocoder resolves it once
+  and stores the coordinates) and it quietly grows a HAS_AIR reading and a
+  HAS_QUAKE neighbourhood: "which of my places has the worst air right now",
+  "any earthquakes near my places this month". The realm owns its places
+  (PlanetPlace), so it works installed on its own; installed beside
+  realm-uk-streets, every UkPlace you watch there grows the same readings
+  with nothing to re-enter.
 
-  Ships two typed APIs (`open_meteo_air`, `usgs`), two virtual types
-  (AirQuality, Earthquake) with composite-key joins, saved views, and the
-  Planet Pulse app (`apps/planet-pulse.html`) — a live dashboard with a
+  Ships three typed APIs (`open_meteo_air`, `open_meteo_geo`, `usgs`), a
+  persisted PlanetPlace anchor, two virtual types (AirQuality, Earthquake)
+  with composite-key joins, saved views, and the Planet Pulse app
+  (`apps/planet-pulse.html`) — add a place, then watch AQI gauges and a
   seismic radar per place.
 
   No API keys and no accounts — every source is open and unauthenticated,
   so the realm works the moment it is installed.
-version: 0.1.0
+version: 0.2.0
 author: rod
 url: https://github.com/embabel-worlds/realm-planet
 category: science
@@ -26,6 +30,8 @@ tags:
   - apps
 exports:
   - open_meteo_air
+  - open_meteo_geo
   - usgs
+  - PlanetPlace
   - AirQuality
   - Earthquake
